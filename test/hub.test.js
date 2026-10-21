@@ -19,6 +19,7 @@ import {
   deviceId,
   featureId,
   serverFeatureId,
+  watch,
 } from './helpers/world.js';
 
 async function world(t, options = {}) {
@@ -320,4 +321,77 @@ test('changedetection.io unreachable for long: one line, and one when it answers
   assert.match(lines[0], /WARN.*ECONNREFUSED/);
   assert.match(lines[1], /answers again/);
   assert.ok(!lines.join('\n').includes(API_KEY));
+});
+
+// --- Review fixes ----------------------------------------------------------------------
+
+test('snapshots unreadable after a change: nothing is lost, the change is announced at the next read', async (t) => {
+  const w = await world(t);
+  w.cd.change(UUIDS.shop, 'In Stock: True - Price: 99.9');
+  const request = w.cd.request.bind(w.cd);
+  w.cd.request = async (url, options) => {
+    if (url.includes('/history')) {
+      throw Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' });
+    }
+    return request(url, options);
+  };
+  await step(w);
+  assert.equal(w.fake.sceneEvents.length, 0);
+  w.cd.request = request;
+  await step(w);
+  assert.deepEqual(
+    w.fake.sceneEvents.map((e) => e.key),
+    [TRIGGERS.CHANGED, TRIGGERS.PRICE_DROP, TRIGGERS.BACK_IN_STOCK],
+  );
+});
+
+test('Gladys refusing a scene event: it is sent again at the next read', async (t) => {
+  const w = await world(t);
+  w.cd.change(UUIDS.news, 'News\n\nOther');
+  const refuse = t.mock.method(w.gladys, 'publishSceneEvent', async () => {
+    throw new Error('HTTP 503');
+  });
+  await step(w);
+  assert.equal(refuse.mock.callCount(), 1);
+  refuse.mock.restore();
+  await step(w);
+  assert.equal(events(w, TRIGGERS.CHANGED).length, 1);
+  assert.equal(events(w, TRIGGERS.CHANGED)[0].data.excerpt, 'Other');
+  await step(w);
+  assert.equal(events(w, TRIGGERS.CHANGED).length, 1, 'once');
+});
+
+test('a watch switched to "Re-stock & Price detection" gets its price after a Search', async (t) => {
+  const w = await world(t);
+  const news = () => w.fake.discoveredDevices.find((d) => d.name === 'Village news');
+  assert.equal(news().features.length, 5);
+  w.cd.get(UUIDS.news).processor = 'restock_diff';
+  w.cd.change(UUIDS.news, 'In Stock: True - Price: 12.5');
+  await step(w);
+  assert.equal(news().features.length, 5, 'the processor is read once');
+  await w.hub.rediscover();
+  assert.equal(news().features.length, 7);
+  assert.equal(w.hub.watches.get(UUIDS.news).price, 12.5);
+});
+
+test('a key corrected during a read is used at once, and never reported connected before a read', async (t) => {
+  const w = await world(t, { config: { url: CD_URL, api_key: 'wrong', language: 'en' } });
+  assert.equal(w.fake.connectionStatus.connected, false);
+  const report = await w.hub
+    .reconfigure({ ...w.hub.config, apiKey: API_KEY })
+    .then(() => w.hub.testConnection());
+  assert.match(report.en, /^OK, changedetection\.io 0\.60\.9, 3 watch/);
+  assert.deepEqual(w.fake.connectionStatus, { connected: true });
+});
+
+test('never more than 250 states a minute, the rest at the next reads', async (t) => {
+  const watches = Array.from({ length: 60 }, (_, i) =>
+    watch({ uuid: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, title: `Page ${i}` }),
+  );
+  const w = await world(t, { cd: new FakeChangedetection({ watches }) });
+  w.hub.isCreated = () => true; // every device added
+  await w.hub.resync(w.hub.config);
+  assert.ok(w.fake.states.length <= 250, `${w.fake.states.length} states`);
+  await step(w, 61_000);
+  assert.equal(w.fake.states.length, 60 * 3 + 3, 'every watch and the server, in the end');
 });

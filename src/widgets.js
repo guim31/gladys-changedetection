@@ -19,7 +19,7 @@
 
 import { WIDGET_COLORS } from '@gladysassistant/integration-sdk';
 import { WIDGET_KEY } from './hub.js';
-import { parseWatchId, watchName } from './devices.js';
+import { isServerId, parseWatchId, watchName } from './devices.js';
 import { shorten } from './cd/snapshots.js';
 import { pick } from './texts.js';
 
@@ -77,7 +77,8 @@ function message(text, language) {
 /** The watches the widget shows: the chosen devices, or every watch. */
 export function selectWatches(hub, settings) {
   const chosen = [settings?.watches ?? []].flat().filter((id) => typeof id === 'string' && id);
-  if (chosen.length === 0) {
+  // The changedetection.io device stands for every watch, as in the scene actions.
+  if (chosen.length === 0 || chosen.some((id) => isServerId(hub.gladys, id))) {
     return [...hub.watches.values()];
   }
   const uuids = new Set(chosen.map((id) => parseWatchId(hub.gladys, id)).filter(Boolean));
@@ -173,7 +174,7 @@ async function get(hub, { settings, language = 'en' }) {
 /** The ids of the chosen watches, or [null] for every watch. */
 function targets(hub, settings) {
   const chosen = [settings?.watches ?? []].flat().filter((id) => typeof id === 'string' && id);
-  return chosen.length === 0 ? [null] : chosen;
+  return chosen.length === 0 || chosen.some((id) => isServerId(hub.gladys, id)) ? [null] : chosen;
 }
 
 async function action(hub, { actionKey, settings }) {

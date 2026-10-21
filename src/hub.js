@@ -54,6 +54,7 @@ export const HUB_TIMINGS = {
 };
 
 const MAX_STATES_PER_REQUEST = 100;
+const MAX_STATES_PER_MINUTE = 250;
 const MAX_TRANSPORTS_PER_REQUEST = 100;
 
 const signature = (config) => JSON.stringify([config.url, config.apiKey, config.allowSelfSigned]);
@@ -152,8 +153,11 @@ export class CdHub {
       this.discovered = null;
       this.published.clear(); // the texts follow the language
     }
-    await this.pollNow({ publish: true });
-    this.schedulePoll();
+    try {
+      await this.pollNow({ publish: true });
+    } finally {
+      this.schedulePoll();
+    }
   }
 
   async stop() {
@@ -200,8 +204,8 @@ export class CdHub {
   // --- Devices ---------------------------------------------------------------
 
   discoveredDevices() {
-    if (this.readAt === 0) {
-      return [];
+    if (this.readAt <= 0) {
+      return []; // never read: nothing to propose, not even the server
     }
     const options = { language: this.config.language, currency: this.config.currency };
     return [
@@ -232,7 +236,9 @@ export class CdHub {
 
   /** "Search" in the Discovery tab: read again, publish the list again. */
   async rediscover() {
-    await this.pollNow();
+    // A watch may have switched to (or from) "Re-stock & Price detection".
+    this.refreshProcessors = true;
+    await this.pollNow({ fresh: true });
     await this.publishDevices({ force: true });
   }
 
@@ -257,15 +263,28 @@ export class CdHub {
    * Read the watches and apply what changed. Concurrent calls share the read.
    * @returns {Promise<void>}
    */
-  pollNow({ publish = false } = {}) {
+  async pollNow({ publish = false, fresh = false } = {}) {
     if (!this.client) {
       return this.afterChanges(false, { publish });
     }
     const client = this.client;
-    this.polling ??= this.read(client).finally(() => {
-      this.polling = null;
-    });
-    return this.polling.then((changed) => this.afterChanges(changed, { publish }));
+    // A read in progress is shared, unless it started with another client
+    // (reconfigured meanwhile) or the caller needs what happened since
+    // (after "Mark as viewed").
+    if (this.polling && (this.polling.client !== client || fresh)) {
+      await this.polling.promise.catch(() => {});
+    }
+    if (!this.polling || this.polling.client !== client) {
+      const polling = { client };
+      polling.promise = this.read(client).finally(() => {
+        if (this.polling === polling) {
+          this.polling = null;
+        }
+      });
+      this.polling = polling;
+    }
+    const changed = await this.polling.promise;
+    return this.afterChanges(changed, { publish });
   }
 
   /** @returns {Promise<boolean>} whether the widget shows something new */
@@ -355,7 +374,13 @@ export class CdHub {
       }
     }
     this.watches = next;
-    this.store.save(this.saved);
+    this.refreshProcessors = false;
+    const savedKey = JSON.stringify(this.saved);
+    if (savedKey !== this.savedKey) {
+      // Written only when something changed: /data is often an SD card.
+      this.savedKey = savedKey;
+      this.store.save(this.saved);
+    }
 
     for (const watch of next.values()) {
       await this.publishWatchStates(watch);
@@ -374,7 +399,7 @@ export class CdHub {
     const entry = { ...before };
     const watch = { ...raw };
 
-    if (!entry.processor) {
+    if (!entry.processor || this.refreshProcessors) {
       try {
         entry.processor = await client.processor(watch.uuid);
       } catch (err) {
@@ -398,6 +423,11 @@ export class CdHub {
     if (changed || needsStock) {
       snapshots = await this.readSnapshots(client, watch.uuid, { previous: changed });
     }
+    if (changed && snapshots === null) {
+      // The change is read again at the next cycle, with its excerpt and
+      // price: announcing it now would lose them.
+      return this.keepBefore(watch, before, entry.processor);
+    }
     if (watch.restock && snapshots?.latest !== undefined) {
       const stock = parseRestock(snapshots.latest);
       entry.inStock = stock?.inStock ?? null;
@@ -418,12 +448,27 @@ export class CdHub {
     entry.lastChanged = watch.lastChanged;
     entry.lastChecked = watch.lastChecked;
     entry.error = Boolean(watch.error);
-    this.saved.watches[watch.uuid] = entry;
 
-    if (before !== undefined) {
-      await this.fireEvents(watch, before, changed);
+    if (before !== undefined && !(await this.fireEvents(watch, before, changed))) {
+      // Gladys refused an event (it is restarting): announce it again later.
+      return this.keepBefore(watch, before, entry.processor);
     }
+    this.saved.watches[watch.uuid] = entry;
     return watch;
+  }
+
+  /** Keep what was last seen of a watch, to handle its change at the next cycle. */
+  keepBefore(watch, before, processor) {
+    this.saved.watches[watch.uuid] = { ...before, processor };
+    return {
+      ...watch,
+      lastChanged: before.lastChanged ?? 0,
+      unviewed: watch.unviewed && (before.lastChanged ?? 0) > 0,
+      error: before.error ? watch.error : null,
+      price: before.price ?? null,
+      inStock: before.inStock ?? null,
+      excerpt: before.excerpt ?? null,
+    };
   }
 
   /**
@@ -447,24 +492,26 @@ export class CdHub {
     }
   }
 
+  /** @returns {Promise<boolean>} false when Gladys refused one of the events */
   async fireEvents(watch, before, changed) {
     const name = watchName(watch);
+    let ok = true;
     if (changed) {
-      logger.info(`"${name}" changed`);
-      await this.fireWatch(TRIGGERS.CHANGED, watch, { excerpt: watch.excerpt ?? '' });
+      logger.debug(`"${name}" changed`);
+      ok &&= await this.fireWatch(TRIGGERS.CHANGED, watch, { excerpt: watch.excerpt ?? '' });
     }
     if (watch.restock && changed) {
       const was = typeof before.price === 'number' ? before.price : null;
       if (was !== null && watch.price !== null && watch.price < was) {
-        logger.info(`"${name}": price ${was} → ${watch.price}`);
-        await this.fireWatch(TRIGGERS.PRICE_DROP, watch, {
+        logger.debug(`"${name}": price ${was} → ${watch.price}`);
+        ok &&= await this.fireWatch(TRIGGERS.PRICE_DROP, watch, {
           price: watch.price,
           previous_price: was,
         });
       }
       if (before.inStock === false && watch.inStock === true) {
-        logger.info(`"${name}" is back in stock`);
-        await this.fireWatch(
+        logger.debug(`"${name}" is back in stock`);
+        ok &&= await this.fireWatch(
           TRIGGERS.BACK_IN_STOCK,
           watch,
           watch.price === null ? {} : { price: watch.price },
@@ -472,9 +519,10 @@ export class CdHub {
       }
     }
     if (!before.error && watch.error) {
-      logger.info(`"${name}" is in error`);
-      await this.fireWatch(TRIGGERS.ERROR, watch, { error: watch.error.slice(0, 500) });
+      logger.debug(`"${name}" is in error`);
+      ok &&= await this.fireWatch(TRIGGERS.ERROR, watch, { error: watch.error.slice(0, 500) });
     }
+    return ok;
   }
 
   fireWatch(key, watch, extra = {}) {
@@ -490,8 +538,11 @@ export class CdHub {
   async fireEvent(key, data) {
     try {
       await this.gladys.publishSceneEvent(key, data);
+      this.problems.recover('events', 'Scene events accepted again');
+      return true;
     } catch (err) {
-      logger.warn(`Scene event ${key} refused: ${err.message}`);
+      this.problems.fail('events', `Scene event ${key} refused: ${err.message}`);
+      return false;
     }
   }
 
@@ -528,9 +579,16 @@ export class CdHub {
     await this.publishValues(serverValues(this.gladys, this.watches.values()), options);
   }
 
-  async sendStates(states) {
+  async sendStates(all) {
+    // Gladys accepts 300 states a minute: beyond the budget, the rest stays
+    // unpublished and goes at the next cycles (after a resync, a language
+    // change or the heartbeat of many watches).
+    const now = this.now();
+    this.sentTimes = (this.sentTimes ?? []).filter((at) => now - at < 60_000);
+    const states = all.slice(0, Math.max(0, MAX_STATES_PER_MINUTE - this.sentTimes.length));
     for (let at = 0; at < states.length; at += MAX_STATES_PER_REQUEST) {
       const batch = states.slice(at, at + MAX_STATES_PER_REQUEST);
+      this.sentTimes.push(...batch.map(() => now));
       try {
         await this.gladys.publishStates(batch);
         const now = this.now();
@@ -596,7 +654,7 @@ export class CdHub {
     if (this.error) {
       return { connected: false, message: ERROR_TEXT[this.error.kind] };
     }
-    return { connected: true };
+    return { connected: this.readAt > 0 };
   }
 
   async publishConnectionStatus() {
@@ -640,8 +698,11 @@ export class CdHub {
   }
 
   /** The reason of a failed command, in the configured language. */
-  commandError(err) {
+  commandError(err, single) {
     const language = this.config.language;
+    if (single && err.status === 404) {
+      return new Error(pick(ACTION_TEXT.unknownWatch, language)); // deleted meanwhile
+    }
     return new Error(err.kind ? pick(ERROR_TEXT[err.kind], language) : err.message);
   }
 
@@ -660,7 +721,7 @@ export class CdHub {
         await this.client.recheck(watches[0].uuid);
       }
     } catch (err) {
-      throw this.commandError(err);
+      throw this.commandError(err, !all);
     }
     logger.info(all ? 'Check of every watch requested' : `Check of ${watches[0].uuid} requested`);
     this.readSoon();
@@ -681,11 +742,11 @@ export class CdHub {
         await this.client.markViewed(watch.uuid, Math.max(at, watch.lastChanged ?? 0));
       }
     } catch (err) {
-      throw this.commandError(err);
+      throw this.commandError(err, !all);
     }
     if (targets.length > 0) {
       logger.info(`${targets.length} watch(es) marked as viewed`);
-      await this.pollNow();
+      await this.pollNow({ fresh: true });
     }
     return targets.length;
   }

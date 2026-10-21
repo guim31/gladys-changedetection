@@ -21,7 +21,7 @@ export class Store {
     this.path = join(directory, FILE_NAME);
     this.pending = null;
     this.writing = null;
-    // Saved after every read that changed something: a /data that cannot be
+    // Saved after each read that changed something: a /data that cannot be
     // written is reported once.
     this.problems = new ProblemLog(logger);
   }
