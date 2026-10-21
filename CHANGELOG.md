@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-21
+
 ### Added
 
 - The watches of changedetection.io as Gladys devices, proposed in the
@@ -27,4 +29,5 @@ the notes of the version's GitHub Release.
   and a transport badge on every device.
 - English, French, German and Spanish everywhere, documentation included.
 
-[Unreleased]: https://github.com/guim31/gladys-changedetection/commits/main
+[Unreleased]: https://github.com/guim31/gladys-changedetection/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/guim31/gladys-changedetection/releases/tag/v1.0.0
