@@ -1,177 +1,735 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "changedetection.io",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Know in Gladys when a watched web page changes: price drop, back in stock, new post.",
+    "fr": "Sachez dans Gladys quand une page surveillée change : prix en baisse, retour en stock, nouveauté.",
+    "de": "Erfahre in Gladys, wenn sich eine überwachte Webseite ändert: Preissenkung, wieder auf Lager, Neues.",
+    "es": "Sepa en Gladys cuándo cambia una página web vigilada: bajada de precio, vuelta al stock, novedad."
   },
   "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "docker_image": "ghcr.io/guim31/gladys-changedetection:1.0.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/guim31/gladys-changedetection/main/cover.png",
+  "categories": ["services"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Your changedetection.io",
+        "fr": "Votre changedetection.io",
+        "de": "Dein changedetection.io",
+        "es": "Su changedetection.io"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "In changedetection.io, open Settings → API, copy the API key and paste it below with the address of changedetection.io. Then add the watches to follow from the Discover tab: the scene triggers work for every watch, added or not.",
+        "fr": "Dans changedetection.io, ouvrez Settings → API, copiez la clé d'API et collez-la ci-dessous avec l'adresse de changedetection.io. Ajoutez ensuite les surveillances à suivre depuis l'onglet Découverte : les déclencheurs de scène valent pour toutes, ajoutées ou non.",
+        "de": "Öffne in changedetection.io Settings → API, kopiere den API-Schlüssel und füge ihn unten mit der Adresse von changedetection.io ein. Lege dann die Überwachungen im Tab „Entdecken“ an: Die Szenen-Auslöser gelten für alle, angelegt oder nicht.",
+        "es": "En changedetection.io, abra Settings → API, copie la clave API y péguela abajo con la dirección de changedetection.io. Después, añada las vigilancias que quiera seguir desde la pestaña Descubrir: los disparadores de escena valen para todas, añadidas o no."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/guim31/gladys-changedetection/blob/main/docs/en.md",
+          "label": {
+            "en": "Setup guide",
+            "fr": "Guide d'installation",
+            "de": "Installationsanleitung",
+            "es": "Guía de instalación"
+          }
+        },
+        {
+          "url": "https://changedetection.io/docs/api_v1/index.html",
+          "label": {
+            "en": "changedetection.io API",
+            "fr": "API de changedetection.io",
+            "de": "API von changedetection.io",
+            "es": "API de changedetection.io"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "url",
+      "type": "string",
+      "label": {
+        "en": "changedetection.io address",
+        "fr": "Adresse de changedetection.io",
+        "de": "Adresse von changedetection.io",
+        "es": "Dirección de changedetection.io"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "description": {
+        "en": "The address you open changedetection.io with, port included (5000 by default).",
+        "fr": "L'adresse avec laquelle vous ouvrez changedetection.io, port compris (5000 par défaut).",
+        "de": "Die Adresse, mit der du changedetection.io öffnest, mit Port (standardmäßig 5000).",
+        "es": "La dirección con la que abre changedetection.io, puerto incluido (5000 por defecto)."
+      },
+      "placeholder": {
+        "en": "e.g. http://192.168.1.2:5000",
+        "fr": "ex. http://192.168.1.2:5000",
+        "de": "z. B. http://192.168.1.2:5000",
+        "es": "p. ej. http://192.168.1.2:5000"
+      },
+      "required": false
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+      "key": "api_key",
+      "type": "secret",
+      "label": {
+        "en": "API key",
+        "fr": "Clé d'API",
+        "de": "API-Schlüssel",
+        "es": "Clave API"
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "description": {
+        "en": "Settings → API in changedetection.io. Leave empty only if API access needs no key there.",
+        "fr": "Settings → API dans changedetection.io. À laisser vide seulement si l'API n'y demande pas de clé.",
+        "de": "Settings → API in changedetection.io. Lass das Feld nur leer, wenn die API dort keinen Schlüssel verlangt.",
+        "es": "Settings → API en changedetection.io. Déjela vacía solo si la API no pide clave allí."
+      },
+      "required": false
     },
     {
-      "key": "unit",
+      "key": "options",
+      "type": "section",
+      "label": {
+        "en": "Options",
+        "fr": "Options",
+        "de": "Optionen",
+        "es": "Opciones"
+      },
+      "description": {
+        "en": "changedetection.io checks each page at its own interval (3 hours by default): Gladys reads its results, it does not check the pages.",
+        "fr": "changedetection.io vérifie chaque page à son propre rythme (toutes les 3 heures par défaut) : Gladys lit ses résultats, sans vérifier les pages.",
+        "de": "changedetection.io prüft jede Seite in seinem eigenen Takt (standardmäßig alle 3 Stunden): Gladys liest die Ergebnisse, prüft die Seiten aber nicht.",
+        "es": "changedetection.io comprueba cada página a su propio ritmo (cada 3 horas por defecto): Gladys lee sus resultados, sin comprobar las páginas."
+      }
+    },
+    {
+      "key": "poll_interval",
       "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "label": {
+        "en": "Refresh interval",
+        "fr": "Intervalle de rafraîchissement",
+        "de": "Aktualisierungsintervall",
+        "es": "Intervalo de actualización"
+      },
+      "description": {
+        "en": "How often the results of changedetection.io are read.",
+        "fr": "Fréquence de lecture des résultats de changedetection.io.",
+        "de": "Wie oft die Ergebnisse von changedetection.io gelesen werden.",
+        "es": "Con qué frecuencia se leen los resultados de changedetection.io."
+      },
       "required": false,
-      "default": "celsius",
+      "default": "60",
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "30",
+          "label": {
+            "en": "30 seconds",
+            "fr": "30 secondes",
+            "de": "30 Sekunden",
+            "es": "30 segundos"
+          }
+        },
+        {
+          "value": "60",
+          "label": {
+            "en": "1 minute",
+            "fr": "1 minute",
+            "de": "1 Minute",
+            "es": "1 minuto"
+          }
+        },
+        {
+          "value": "120",
+          "label": {
+            "en": "2 minutes",
+            "fr": "2 minutes",
+            "de": "2 Minuten",
+            "es": "2 minutos"
+          }
+        },
+        {
+          "value": "300",
+          "label": {
+            "en": "5 minutes",
+            "fr": "5 minutes",
+            "de": "5 Minuten",
+            "es": "5 minutos"
+          }
+        },
+        {
+          "value": "900",
+          "label": {
+            "en": "15 minutes",
+            "fr": "15 minutes",
+            "de": "15 Minuten",
+            "es": "15 minutos"
+          }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "key": "currency",
+      "type": "select",
+      "label": {
+        "en": "Currency of the prices",
+        "fr": "Devise des prix",
+        "de": "Währung der Preise",
+        "es": "Moneda de los precios"
+      },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "Unit of the price of the \"Re-stock & Price detection\" watches, set when a device is added.",
+        "fr": "Unité du prix des surveillances « Re-stock & Price detection », fixée à l'ajout d'un appareil.",
+        "de": "Einheit des Preises der Überwachungen „Re-stock & Price detection“, beim Hinzufügen eines Geräts festgelegt.",
+        "es": "Unidad del precio de las vigilancias «Re-stock & Price detection», fijada al añadir un dispositivo."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": "euro",
+      "options": [
+        {
+          "value": "euro",
+          "label": {
+            "en": "Euro (€)",
+            "fr": "Euro (€)",
+            "de": "Euro (€)",
+            "es": "Euro (€)"
+          }
+        },
+        {
+          "value": "dollar",
+          "label": {
+            "en": "Dollar ($)",
+            "fr": "Dollar ($)",
+            "de": "Dollar ($)",
+            "es": "Dólar ($)"
+          }
+        },
+        {
+          "value": "pound-sterling",
+          "label": {
+            "en": "Pound sterling (£)",
+            "fr": "Livre sterling (£)",
+            "de": "Pfund Sterling (£)",
+            "es": "Libra esterlina (£)"
+          }
+        },
+        {
+          "value": "none",
+          "label": {
+            "en": "No unit",
+            "fr": "Sans unité",
+            "de": "Keine Einheit",
+            "es": "Sin unidad"
+          }
+        }
+      ]
+    },
+    {
+      "key": "allow_self_signed",
+      "type": "boolean",
+      "label": {
+        "en": "Accept self-signed certificates",
+        "fr": "Accepter les certificats auto-signés",
+        "de": "Selbstsignierte Zertifikate akzeptieren",
+        "es": "Aceptar certificados autofirmados"
+      },
+      "description": {
+        "en": "Only for an https:// address whose certificate your browser does not trust either.",
+        "fr": "Seulement pour une adresse en https:// dont le certificat n'est pas reconnu par votre navigateur non plus.",
+        "de": "Nur für eine https://-Adresse, deren Zertifikat auch dein Browser nicht anerkennt.",
+        "es": "Solo para una dirección https:// cuyo certificado tampoco reconoce su navegador."
+      },
+      "required": false,
+      "default": false
+    },
+    {
+      "key": "language",
+      "type": "select",
+      "label": {
+        "en": "Language of the names",
+        "fr": "Langue des noms",
+        "de": "Sprache der Namen",
+        "es": "Idioma de los nombres"
+      },
+      "description": {
+        "en": "Language of the feature names (set when a device is added), of the dates and of the error messages.",
+        "fr": "Langue des noms des fonctionnalités (fixés à l'ajout d'un appareil), des dates et des messages d'erreur.",
+        "de": "Sprache der Funktionsnamen (beim Hinzufügen eines Geräts festgelegt), der Daten und der Fehlermeldungen.",
+        "es": "Idioma de los nombres de las funciones (fijados al añadir un dispositivo), de las fechas y de los mensajes de error."
+      },
+      "required": false,
+      "default": "fr",
+      "options": [
+        {
+          "value": "en",
+          "label": {
+            "en": "English",
+            "fr": "Anglais",
+            "de": "Englisch",
+            "es": "Inglés"
+          }
+        },
+        {
+          "value": "fr",
+          "label": {
+            "en": "French",
+            "fr": "Français",
+            "de": "Französisch",
+            "es": "Francés"
+          }
+        },
+        {
+          "value": "de",
+          "label": {
+            "en": "German",
+            "fr": "Allemand",
+            "de": "Deutsch",
+            "es": "Alemán"
+          }
+        },
+        {
+          "value": "es",
+          "label": {
+            "en": "Spanish",
+            "fr": "Espagnol",
+            "de": "Spanisch",
+            "es": "Español"
+          }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
+      "key": "test_connection",
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion",
+        "de": "Verbindung testen",
+        "es": "Probar la conexión"
+      },
       "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "page_changed",
+      "label": {
+        "en": "A page changed",
+        "fr": "Une page a changé",
+        "de": "Eine Seite hat sich geändert",
+        "es": "Una página ha cambiado"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "changedetection.io detected a change on a watched page, with a short excerpt of what changed.",
+        "fr": "changedetection.io a détecté un changement sur une page surveillée, avec un court extrait de ce qui a changé.",
+        "de": "changedetection.io hat eine Änderung auf einer überwachten Seite erkannt, mit einem kurzen Auszug der Änderung.",
+        "es": "changedetection.io ha detectado un cambio en una página vigilada, con un breve extracto de lo que ha cambiado."
       },
       "fields": [
         {
           "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
           "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
+          "source": "devices",
+          "label": {
+            "en": "Watches (empty: any)",
+            "fr": "Surveillances (vide : n'importe laquelle)",
+            "de": "Überwachungen (leer: beliebig)",
+            "es": "Vigilancias (vacío: cualquiera)"
+          }
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "title",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": {
+            "en": "Watch title",
+            "fr": "Titre de la surveillance",
+            "de": "Titel der Überwachung",
+            "es": "Título de la vigilancia"
+          }
+        },
+        {
+          "key": "url",
+          "type": "string",
+          "label": {
+            "en": "Page address",
+            "fr": "Adresse de la page",
+            "de": "Adresse der Seite",
+            "es": "Dirección de la página"
+          }
+        },
+        {
+          "key": "excerpt",
+          "type": "string",
+          "label": {
+            "en": "What changed",
+            "fr": "Ce qui a changé",
+            "de": "Was sich geändert hat",
+            "es": "Qué ha cambiado"
+          }
+        },
+        {
+          "key": "tags",
+          "type": "string",
+          "label": {
+            "en": "Tags",
+            "fr": "Étiquettes",
+            "de": "Tags",
+            "es": "Etiquetas"
+          }
+        }
+      ]
+    },
+    {
+      "key": "price_dropped",
+      "label": {
+        "en": "A price dropped",
+        "fr": "Un prix a baissé",
+        "de": "Ein Preis ist gesunken",
+        "es": "Un precio ha bajado"
+      },
+      "description": {
+        "en": "The price of a \"Re-stock & Price detection\" watch went down. A threshold: a scene on the Price feature of the device.",
+        "fr": "Le prix d'une surveillance « Re-stock & Price detection » a baissé. Pour un seuil : une scène sur la fonctionnalité Prix de l'appareil.",
+        "de": "Der Preis einer Überwachung „Re-stock & Price detection“ ist gesunken. Für eine Schwelle: eine Szene auf die Funktion Preis des Geräts.",
+        "es": "El precio de una vigilancia «Re-stock & Price detection» ha bajado. Para un umbral: una escena sobre la función Precio del dispositivo."
+      },
+      "fields": [
+        {
+          "key": "device",
+          "type": "multi_select",
+          "source": "devices",
+          "label": {
+            "en": "Watches (empty: any)",
+            "fr": "Surveillances (vide : n'importe laquelle)",
+            "de": "Überwachungen (leer: beliebig)",
+            "es": "Vigilancias (vacío: cualquiera)"
+          }
+        }
+      ],
+      "variables": [
+        {
+          "key": "title",
+          "type": "string",
+          "label": {
+            "en": "Watch title",
+            "fr": "Titre de la surveillance",
+            "de": "Titel der Überwachung",
+            "es": "Título de la vigilancia"
+          }
+        },
+        {
+          "key": "url",
+          "type": "string",
+          "label": {
+            "en": "Page address",
+            "fr": "Adresse de la page",
+            "de": "Adresse der Seite",
+            "es": "Dirección de la página"
+          }
+        },
+        {
+          "key": "price",
+          "type": "number",
+          "label": {
+            "en": "Price",
+            "fr": "Prix",
+            "de": "Preis",
+            "es": "Precio"
+          }
+        },
+        {
+          "key": "previous_price",
+          "type": "number",
+          "label": {
+            "en": "Previous price",
+            "fr": "Prix précédent",
+            "de": "Vorheriger Preis",
+            "es": "Precio anterior"
+          }
+        },
+        {
+          "key": "tags",
+          "type": "string",
+          "label": {
+            "en": "Tags",
+            "fr": "Étiquettes",
+            "de": "Tags",
+            "es": "Etiquetas"
+          }
+        }
+      ]
+    },
+    {
+      "key": "back_in_stock",
+      "label": {
+        "en": "Back in stock",
+        "fr": "De retour en stock",
+        "de": "Wieder auf Lager",
+        "es": "De nuevo en stock"
+      },
+      "description": {
+        "en": "A \"Re-stock & Price detection\" watch went from out of stock to in stock.",
+        "fr": "Une surveillance « Re-stock & Price detection » est passée d'épuisé à en stock.",
+        "de": "Eine Überwachung „Re-stock & Price detection“ ist von ausverkauft auf Lager gewechselt.",
+        "es": "Una vigilancia «Re-stock & Price detection» ha pasado de agotado a en stock."
+      },
+      "fields": [
+        {
+          "key": "device",
+          "type": "multi_select",
+          "source": "devices",
+          "label": {
+            "en": "Watches (empty: any)",
+            "fr": "Surveillances (vide : n'importe laquelle)",
+            "de": "Überwachungen (leer: beliebig)",
+            "es": "Vigilancias (vacío: cualquiera)"
+          }
+        }
+      ],
+      "variables": [
+        {
+          "key": "title",
+          "type": "string",
+          "label": {
+            "en": "Watch title",
+            "fr": "Titre de la surveillance",
+            "de": "Titel der Überwachung",
+            "es": "Título de la vigilancia"
+          }
+        },
+        {
+          "key": "url",
+          "type": "string",
+          "label": {
+            "en": "Page address",
+            "fr": "Adresse de la page",
+            "de": "Adresse der Seite",
+            "es": "Dirección de la página"
+          }
+        },
+        {
+          "key": "price",
+          "type": "number",
+          "label": {
+            "en": "Price",
+            "fr": "Prix",
+            "de": "Preis",
+            "es": "Precio"
+          }
+        },
+        {
+          "key": "tags",
+          "type": "string",
+          "label": {
+            "en": "Tags",
+            "fr": "Étiquettes",
+            "de": "Tags",
+            "es": "Etiquetas"
+          }
+        }
+      ]
+    },
+    {
+      "key": "watch_error",
+      "label": {
+        "en": "A watch fails",
+        "fr": "Une surveillance échoue",
+        "de": "Eine Überwachung schlägt fehl",
+        "es": "Una vigilancia falla"
+      },
+      "description": {
+        "en": "The check of a page started failing (page gone, server error, filter not found…), once until it works again.",
+        "fr": "La vérification d'une page s'est mise à échouer (page disparue, erreur serveur, filtre introuvable…), une fois jusqu'au retour.",
+        "de": "Die Prüfung einer Seite schlägt neuerdings fehl (Seite weg, Serverfehler, Filter nicht gefunden…), einmal bis es wieder geht.",
+        "es": "La comprobación de una página ha empezado a fallar (página desaparecida, error del servidor, filtro no encontrado…), una vez hasta que vuelva."
+      },
+      "fields": [
+        {
+          "key": "device",
+          "type": "multi_select",
+          "source": "devices",
+          "label": {
+            "en": "Watches (empty: any)",
+            "fr": "Surveillances (vide : n'importe laquelle)",
+            "de": "Überwachungen (leer: beliebig)",
+            "es": "Vigilancias (vacío: cualquiera)"
+          }
+        }
+      ],
+      "variables": [
+        {
+          "key": "title",
+          "type": "string",
+          "label": {
+            "en": "Watch title",
+            "fr": "Titre de la surveillance",
+            "de": "Titel der Überwachung",
+            "es": "Título de la vigilancia"
+          }
+        },
+        {
+          "key": "url",
+          "type": "string",
+          "label": {
+            "en": "Page address",
+            "fr": "Adresse de la page",
+            "de": "Adresse der Seite",
+            "es": "Dirección de la página"
+          }
+        },
+        {
+          "key": "error",
+          "type": "string",
+          "label": {
+            "en": "Error message",
+            "fr": "Message d'erreur",
+            "de": "Fehlermeldung",
+            "es": "Mensaje de error"
+          }
+        },
+        {
+          "key": "tags",
+          "type": "string",
+          "label": {
+            "en": "Tags",
+            "fr": "Étiquettes",
+            "de": "Tags",
+            "es": "Etiquetas"
+          }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "check_now",
+      "label": {
+        "en": "Check a page now",
+        "fr": "Vérifier une page maintenant",
+        "de": "Eine Seite jetzt prüfen",
+        "es": "Comprobar una página ahora"
       },
-      "timeout_seconds": 15,
+      "description": {
+        "en": "changedetection.io checks the page again now (every page when empty); a change fires the scene triggers.",
+        "fr": "changedetection.io vérifie la page tout de suite (toutes si vide) ; un changement lance les déclencheurs de scène.",
+        "de": "changedetection.io prüft die Seite sofort erneut (alle, wenn leer); eine Änderung löst die Szenen-Auslöser aus.",
+        "es": "changedetection.io comprueba la página de inmediato (todas si está vacío); un cambio activa los disparadores de escena."
+      },
+      "timeout_seconds": 20,
       "fields": [
         {
           "key": "device",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
+          "label": {
+            "en": "Watch (empty: all)",
+            "fr": "Surveillance (vide : toutes)",
+            "de": "Überwachung (leer: alle)",
+            "es": "Vigilancia (vacío: todas)"
+          },
+          "required": false
         }
       ],
       "outputs": [
         {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "key": "count",
+          "type": "number",
+          "label": {
+            "en": "Pages queued",
+            "fr": "Pages mises en file",
+            "de": "Eingereihte Seiten",
+            "es": "Páginas en cola"
+          }
+        }
+      ]
+    },
+    {
+      "key": "mark_viewed",
+      "label": {
+        "en": "Mark as viewed",
+        "fr": "Marquer comme vu",
+        "de": "Als gesehen markieren",
+        "es": "Marcar como visto"
+      },
+      "description": {
+        "en": "The change of the watch (every unviewed change when empty) no longer counts as new.",
+        "fr": "Le changement de la surveillance (tous les changements non vus si vide) ne compte plus comme nouveau.",
+        "de": "Die Änderung der Überwachung (alle ungesehenen, wenn leer) zählt nicht mehr als neu.",
+        "es": "El cambio de la vigilancia (todos los no vistos si está vacío) deja de contar como nuevo."
+      },
+      "timeout_seconds": 30,
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Watch (empty: all)",
+            "fr": "Surveillance (vide : toutes)",
+            "de": "Überwachung (leer: alle)",
+            "es": "Vigilancia (vacío: todas)"
+          },
+          "required": false
+        }
+      ],
+      "outputs": [
+        {
+          "key": "count",
+          "type": "number",
+          "label": {
+            "en": "Watches marked",
+            "fr": "Surveillances marquées",
+            "de": "Markierte Überwachungen",
+            "es": "Vigilancias marcadas"
+          }
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "latest_changes",
+      "label": {
+        "en": "Latest changes",
+        "fr": "Derniers changements",
+        "de": "Letzte Änderungen",
+        "es": "Últimos cambios"
       },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "description": {
+        "en": "The latest changes of your watched pages, unviewed ones and errors, with Check now.",
+        "fr": "Les derniers changements de vos pages surveillées, non vus et erreurs, avec Vérifier.",
+        "de": "Die letzten Änderungen deiner überwachten Seiten, ungesehene und Fehler, mit Jetzt prüfen.",
+        "es": "Los últimos cambios de sus páginas vigiladas, no vistos y errores, con Comprobar."
+      },
+      "icon": "eye",
+      "action_timeout_seconds": 30,
+      "settings": [
+        {
+          "key": "watches",
+          "type": "multi_select",
+          "source": "devices",
+          "label": {
+            "en": "Watches (empty: all)",
+            "fr": "Surveillances (vide : toutes)",
+            "de": "Überwachungen (leer: alle)",
+            "es": "Vigilancias (vacío: todas)"
+          },
+          "description": {
+            "en": "Only the devices added to Gladys can be chosen.",
+            "fr": "Seuls les appareils ajoutés à Gladys se choisissent.",
+            "de": "Nur die in Gladys angelegten Geräte sind wählbar.",
+            "es": "Solo se pueden elegir los dispositivos añadidos a Gladys."
+          },
+          "required": false
+        }
+      ]
     }
   ]
 }

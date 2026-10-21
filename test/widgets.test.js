@@ -1,77 +1,119 @@
+// -----------------------------------------------------------------------------
+// The `latest_changes` widget: content validated by the SDK (the core's rules),
+// newest changes first, badges, links, buttons and their actions.
+// -----------------------------------------------------------------------------
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateWidgetContent } from '@gladysassistant/integration-sdk';
-import { createFakeGladys } from '@gladysassistant/integration-sdk/testing';
-import { buildDiscoveredDevices } from '../src/devices/index.js';
-import { simulateLanSession } from '../src/devices/plug.js';
-import { DEMO_STATUS_WIDGET, WIDGETS, refreshWidgets } from '../src/widgets.js';
-import { normalizeConfig } from '../src/config.js';
+import { WIDGET_KEY } from '../src/hub.js';
+import { ACTIONS, MAX_ROWS } from '../src/widgets.js';
+import {
+  CD_URL,
+  FakeChangedetection,
+  UUIDS,
+  createDevices,
+  createWorld,
+  deviceId,
+  watch,
+} from './helpers/world.js';
 
-const gladys = createFakeGladys();
-const config = normalizeConfig();
-const demoStatus = WIDGETS[DEMO_STATUS_WIDGET];
+async function world(t, options) {
+  const w = await createWorld(options);
+  t.after(() => w.app.stop());
+  return w;
+}
 
-// What the SDK passes to onWidgetGet, plus the config index.js adds.
-const getContent = (cfg = config) =>
-  demoStatus.get(gladys, { settings: {}, language: 'en', units: 'metric', config: cfg });
+async function content(w, settings = {}, language = 'en') {
+  const ack = await w.fake.widgetGet(WIDGET_KEY, { settings, language });
+  assert.equal(ack.success, true, ack.error);
+  const result = ack.data.content ?? ack.data;
+  assert.deepEqual(validateWidgetContent(result), []);
+  return result;
+}
 
-test('the demo_status content is rendered exactly as sent', async () => {
-  // [] = nothing the core would drop, truncate or trim to the content budget.
-  assert.deepEqual(validateWidgetContent(await getContent()), []);
-});
+const byType = (result, type) => result.components.filter((c) => c.type === type);
 
-test('the degraded plug connection content is valid too', async () => {
-  simulateLanSession(false);
-  try {
-    const content = await getContent();
-    assert.deepEqual(validateWidgetContent(content), []);
-    const status = content.components.find((component) => component.type === 'status');
-    assert.ok(
-      status.items.some((item) => item.color === 'warning'),
-      'degraded shows a warning',
-    );
-  } finally {
-    simulateLanSession(true);
-  }
-});
-
-test('the live tiles reference features the integration publishes', async () => {
-  const featureIds = new Set(
-    buildDiscoveredDevices(gladys, config).flatMap((device) =>
-      device.features.map((feature) => feature.external_id),
-    ),
+test('the latest changes, newest first, with the unviewed and error counts', async (t) => {
+  const w = await world(t);
+  w.cd.change(UUIDS.news, 'News\n\nMarket on Saturday\n\nNew bakery opens on the main square');
+  w.clock.advance(60_000);
+  await w.hub.pollNow();
+  const result = await content(w);
+  const [unviewed, errors] = byType(result, 'value');
+  assert.equal(unviewed.value, 1);
+  assert.equal(errors.value, 1);
+  const [list] = byType(result, 'card-list');
+  assert.deepEqual(
+    list.items.map((item) => [item.title, item.badge?.text]),
+    [
+      ['Village news', 'New'],
+      ['Broken page', 'Error'],
+    ],
   );
-  const liveTiles = (await getContent()).components.filter((c) => c.device_feature);
-  assert.ok(liveTiles.length > 0, 'the template demonstrates a device-bound tile');
-  for (const tile of liveTiles) {
-    assert.ok(featureIds.has(tile.device_feature), `unknown feature ${tile.device_feature}`);
-  }
+  assert.equal(list.items[0].subtitle, 'New bakery opens on the main square');
+  assert.equal(list.items[0].date, new Date(1792569074 * 1000).toISOString());
+  assert.deepEqual(list.items[0].links, [
+    { url: 'https://news.example.org/village', label: 'Open the page' },
+  ]);
+  const buttons = byType(result, 'button');
+  assert.deepEqual(
+    buttons.map((b) => b.action.key),
+    [ACTIONS.CHECK_ALL, ACTIONS.MARK_ALL_VIEWED],
+  );
+  assert.equal(buttons[1].action.confirm, true);
 });
 
-test('every button action of the content is handled and answers a short toast', async () => {
-  const buttons = (await getContent()).components.filter((c) => c.type === 'button' && c.action);
-  assert.ok(buttons.length > 0, 'the template demonstrates a widget action');
-  for (const { action } of buttons) {
-    const message = await demoStatus.action(gladys, {
-      actionKey: action.key,
-      params: action.params ?? {},
-      settings: {},
-      config,
-    });
-    assert.ok(message.en, 'the toast carries at least the mandatory `en` text');
-    assert.ok(message.en.length <= 200, 'toasts are capped at 200 characters');
-  }
+test('no change yet, and the French texts', async (t) => {
+  const cd = new FakeChangedetection({ watches: [] });
+  const w = await world(t, { cd, config: { url: CD_URL, api_key: 'cd-test-key' } });
+  const result = await content(w, {}, 'fr');
+  assert.equal(byType(result, 'text')[0].text, 'Aucun changement détecté pour le moment.');
+  assert.equal(byType(result, 'button').length, 1, 'nothing to mark as viewed');
+  assert.equal(byType(result, 'button')[0].label, 'Vérifier');
 });
 
-test('an unknown widget action fails, so the user sees the error', async () => {
-  await assert.rejects(
-    demoStatus.action(gladys, { actionKey: 'unknown', params: {}, settings: {}, config }),
-    /Unknown widget action/,
+test('not configured, and changedetection.io down', async (t) => {
+  const empty = await world(t, { config: {} });
+  assert.match(byType(await content(empty), 'text')[0].text, /Enter the address/);
+  const w = await world(t);
+  w.cd.failure = 'down';
+  await w.hub.pollNow();
+  const result = await content(w);
+  assert.equal(byType(result, 'text')[0].text, 'changedetection.io does not answer');
+});
+
+test('the chosen watches only, and eight rows at most', async (t) => {
+  const watches = Array.from({ length: 12 }, (_, i) =>
+    watch({
+      uuid: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      title: `Page ${i}`,
+      snapshots: [
+        { at: 1792569000 + i, text: 'a' },
+        { at: 1792569100 + i, text: 'b' },
+      ],
+    }),
+  );
+  const w = await world(t, { cd: new FakeChangedetection({ watches }) });
+  const all = byType(await content(w), 'card-list')[0];
+  assert.equal(all.items.length, MAX_ROWS);
+  assert.equal(all.items[0].title, 'Page 11');
+  await createDevices(w);
+  const chosen = await content(w, { watches: [deviceId(w.gladys, watches[3].uuid)] });
+  assert.deepEqual(
+    byType(chosen, 'card-list')[0].items.map((item) => item.title),
+    ['Page 3'],
   );
 });
 
-test('refreshWidgets nudges every widget', () => {
-  const fresh = createFakeGladys();
-  refreshWidgets(fresh);
-  assert.deepEqual(fresh.fake.widgetRefreshes, Object.keys(WIDGETS));
+test('the buttons: check every page, mark every change as viewed', async (t) => {
+  const w = await world(t);
+  w.cd.change(UUIDS.news, 'News\n\nOther');
+  await w.hub.pollNow();
+  let ack = await w.fake.widgetAction(WIDGET_KEY, ACTIONS.CHECK_ALL, {}, { settings: {} });
+  assert.equal(ack.success, true, ack.error);
+  assert.deepEqual(w.cd.rechecked, ['all']);
+  ack = await w.fake.widgetAction(WIDGET_KEY, ACTIONS.MARK_ALL_VIEWED, {}, { settings: {} });
+  assert.equal(ack.success, true, ack.error);
+  assert.equal(w.hub.watches.get(UUIDS.news).unviewed, false);
 });

@@ -1,0 +1,20 @@
+{
+  "fc189012-8bfa-4eec-ba83-873e36b9788a": {
+    "date_created": 1792568904,
+    "notification_muted": false,
+    "title": "changedetection.io",
+    "uuid": "fc189012-8bfa-4eec-ba83-873e36b9788a"
+  },
+  "339e8fc2-afcc-416c-8ad2-a6871762f933": {
+    "date_created": 1792568904,
+    "notification_muted": false,
+    "title": "Tech news",
+    "uuid": "339e8fc2-afcc-416c-8ad2-a6871762f933"
+  },
+  "bd701501-5d7e-44d9-a98a-c0c838bb32f8": {
+    "date_created": 1792569199,
+    "notification_muted": false,
+    "title": "Shopping",
+    "uuid": "bd701501-5d7e-44d9-a98a-c0c838bb32f8"
+  }
+}
