@@ -1,0 +1,38 @@
+{
+  "a335064b-2ed7-4d8f-980e-31145c0ffa1a": {
+    "last_changed": 1792569056,
+    "last_checked": 1792569056,
+    "last_error": false,
+    "link": "https://shop.example.com/coffee-grinder",
+    "open_link": "https://shop.example.com/coffee-grinder",
+    "page_title": "Coffee grinder",
+    "tags": ["bd701501-5d7e-44d9-a98a-c0c838bb32f8"],
+    "title": null,
+    "url": "https://shop.example.com/coffee-grinder",
+    "viewed": false
+  },
+  "7bf48e3b-1dd7-4384-b6c0-eb1a4fa405f7": {
+    "last_changed": 0,
+    "last_checked": 1792569014,
+    "last_error": "Error - 500 (Internal server error) received from the web site",
+    "link": "https://broken.example.net/",
+    "open_link": "https://broken.example.net/",
+    "page_title": null,
+    "tags": [],
+    "title": "Broken page",
+    "url": "https://broken.example.net/",
+    "viewed": false
+  },
+  "5ab70fa1-97c7-41c1-a9fe-618627bd640d": {
+    "last_changed": 1792569056,
+    "last_checked": 1792569056,
+    "last_error": false,
+    "link": "https://news.example.org/village",
+    "open_link": "https://news.example.org/village",
+    "page_title": "Village news",
+    "tags": [],
+    "title": "Village news",
+    "url": "https://news.example.org/village",
+    "viewed": true
+  }
+}

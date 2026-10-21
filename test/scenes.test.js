@@ -1,93 +1,57 @@
+// -----------------------------------------------------------------------------
+// Scene actions: check now and mark as viewed, for one watch or every watch.
+// -----------------------------------------------------------------------------
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { createFakeGladys } from '@gladysassistant/integration-sdk/testing';
-import { DEVICE_BLUEPRINTS } from '../src/devices/index.js';
-import { MOTION_DETECTED_TRIGGER, motionSensor } from '../src/devices/motionSensor.js';
-import { SCENE_ACTIONS } from '../src/scenes.js';
-import { normalizeConfig } from '../src/config.js';
+import { serverIds } from '../src/devices.js';
+import { TRIGGERS } from '../src/hub.js';
+import { CD_URL, UUIDS, createWorld, deviceId } from './helpers/world.js';
 
-const manifest = JSON.parse(
-  await readFile(new URL('../gladys-assistant-integration.json', import.meta.url), 'utf8'),
-);
-const config = normalizeConfig();
+async function world(t, options) {
+  const w = await createWorld(options);
+  t.after(() => w.app.stop());
+  return w;
+}
 
-const declarationOf = (list, key) => manifest[list].find((entry) => entry.key === key);
-const keysOf = (list) => (list ?? []).map((entry) => entry.key);
-const deviceIdOf = (gladys, key) =>
-  DEVICE_BLUEPRINTS.find((bp) => bp.key === key).deviceExternalId(gladys);
-
-// Let the async interval callback run to completion.
-const flush = () => new Promise((resolve) => setImmediate(resolve));
-
-test('the motion sensor fires one motion_detected event per detection, none on the clear', async (t) => {
-  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
-  const gladys = createFakeGladys();
-  const stopPush = motionSensor.startPush(gladys, config);
-  try {
-    t.mock.timers.tick(60_000);
-    await flush();
-    assert.equal(gladys.fake.sceneEvents.length, 1, 'one detection, one event');
-    assert.equal(gladys.fake.sceneEvents[0].key, MOTION_DETECTED_TRIGGER);
-    assert.equal(gladys.fake.states.at(-1).state, 1, 'the state is still published');
-
-    t.mock.timers.tick(10_000);
-    await flush();
-    assert.equal(gladys.fake.states.at(-1).state, 0, 'the detection is cleared');
-    assert.equal(gladys.fake.sceneEvents.length, 1, 'the clear fires no event');
-  } finally {
-    stopPush();
-  }
+test('check now: one watch, or every watch when empty or the server is chosen', async (t) => {
+  const w = await world(t);
+  let ack = await w.fake.sceneAction('check_now', { device: deviceId(w.gladys, UUIDS.news) });
+  assert.equal(ack.success, true, ack.error);
+  assert.deepEqual(ack.data.outputs, { count: 1 });
+  ack = await w.fake.sceneAction('check_now', {});
+  assert.deepEqual(ack.data.outputs, { count: 3 });
+  ack = await w.fake.sceneAction('check_now', { device: serverIds(w.gladys).device });
+  assert.deepEqual(ack.data.outputs, { count: 3 });
+  assert.deepEqual(w.cd.rechecked, [UUIDS.news, 'all', 'all']);
 });
 
-test('motion_detected data only carries keys the trigger declares', async (t) => {
-  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
-  const gladys = createFakeGladys();
-  const stopPush = motionSensor.startPush(gladys, config);
-  try {
-    t.mock.timers.tick(60_000);
-    await flush();
-  } finally {
-    stopPush();
-  }
-  const [{ data }] = gladys.fake.sceneEvents;
-  const trigger = declarationOf('scene_triggers', MOTION_DETECTED_TRIGGER);
-  // The core keeps the `fields` keys (filters) and the `variables` keys
-  // (exposed to the scene): any other key would be silently dropped.
-  const declared = [...keysOf(trigger.fields), ...keysOf(trigger.variables)];
-  for (const [key, value] of Object.entries(data)) {
-    assert.ok(declared.includes(key), `data.${key} is not declared, the core would drop it`);
-    assert.ok(value === null || typeof value !== 'object', `data.${key} must be a primitive`);
-  }
-  // A `"source": "devices"` filter stores a device external_id.
-  assert.equal(data.device, deviceIdOf(gladys, 'motion-sensor'));
-  const targets = trigger.fields.find((field) => field.key === 'target').options;
-  assert.ok(
-    targets.some((option) => option.value === data.target),
-    `data.target "${data.target}" must be one of the filter options`,
-  );
+test('mark as viewed: the change no longer counts as new, nothing fired', async (t) => {
+  const w = await world(t);
+  w.cd.change(UUIDS.news, 'News\n\nOther');
+  w.cd.change(UUIDS.shop, 'In Stock: False - Price: 139.9');
+  await w.hub.pollNow();
+  let ack = await w.fake.sceneAction('mark_viewed', { device: deviceId(w.gladys, UUIDS.news) });
+  assert.deepEqual(ack.data.outputs, { count: 1 });
+  assert.equal(w.hub.watches.get(UUIDS.news).unviewed, false);
+  assert.equal(w.hub.watches.get(UUIDS.shop).unviewed, true);
+  ack = await w.fake.sceneAction('mark_viewed', {});
+  assert.deepEqual(ack.data.outputs, { count: 1 });
+  assert.equal(w.hub.watches.get(UUIDS.shop).unviewed, false);
+  assert.equal(w.fake.sceneEvents.filter((e) => e.key === TRIGGERS.CHANGED).length, 2);
 });
 
-test('identify_device signals the chosen device and returns the declared outputs', async () => {
-  const gladys = createFakeGladys();
-  const outputs = await SCENE_ACTIONS.identify_device(gladys, {
-    fields: { device: deviceIdOf(gladys, 'light') },
-    config,
-  });
-  assert.deepEqual(outputs, { signalled: true });
-  const declared = keysOf(declarationOf('scene_actions', 'identify_device').outputs);
-  for (const key of Object.keys(outputs)) {
-    assert.ok(declared.includes(key), `output "${key}" is not declared, the core would drop it`);
-  }
-});
-
-test('identify_device reports a device that cannot signal itself through its output', async () => {
-  // Not a failure: a scene action is never a condition, the scene author
-  // gates the following actions on the output instead.
-  const gladys = createFakeGladys();
-  const outputs = await SCENE_ACTIONS.identify_device(gladys, {
-    fields: { device: deviceIdOf(gladys, 'weather-station') },
-    config,
-  });
-  assert.deepEqual(outputs, { signalled: false });
+test('the errors, in the language of the configuration', async (t) => {
+  const w = await world(t, { config: { url: CD_URL, api_key: 'cd-test-key', language: 'fr' } });
+  let ack = await w.fake.sceneAction('check_now', { device: 'not-ours' });
+  assert.equal(ack.success, false);
+  assert.match(ack.error, /n'est pas une surveillance/);
+  w.cd.failure = 'down';
+  ack = await w.fake.sceneAction('mark_viewed', { device: deviceId(w.gladys, UUIDS.news) });
+  assert.equal(ack.success, false);
+  assert.match(ack.error, /ne répond pas/);
+  const empty = await world(t, { config: {} });
+  ack = await empty.fake.sceneAction('check_now', {});
+  assert.equal(ack.success, false);
+  assert.match(ack.error, /pas configuré/);
 });

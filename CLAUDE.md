@@ -16,8 +16,8 @@ its only runtime dependency. It started from the official JavaScript template.
 ```bash
 npm install
 npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
+node --test test/hub.test.js              # one file
+node --test --test-name-pattern "price"   # tests whose name matches
 npm run lint                              # ESLint
 npm run format:check                      # Prettier, as the CI runs it
 npm run format                            # Prettier, fix in place
@@ -31,16 +31,22 @@ pushing.
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
+index.js                          SDK wiring only: src/app.js registers the handlers before connect()
+src/app.js                        every SDK handler -> the hub (also used by the tests)
+src/hub.js                        reading timer, what changed per watch -> scene events, states, views
+src/devices.js                    devices (one per watch + the server): identity, features, names (4 languages), values
+src/cd/client.js                  REST API of changedetection.io (x-api-key), errors by kind
+src/cd/snapshots.js               excerpt of a change, price and stock of a restock snapshot
+src/cd/http.js                    node:http/https request (self-signed certificates on request)
 src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
+src/widgets.js                    dashboard widget `latest_changes` (manifest `widgets`)
+src/texts.js                      connection, error, report and action texts (4 languages)
 src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
+src/store.js                      /data/changedetection-state.json (what was last seen of each watch)
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
+docs/{en,fr,de,es}.md             user documentation, re-hosted by Gladys (en and fr mandatory)
 test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
+                                  and helpers/fakeChangedetection.js (checked against test/fixtures)
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 
@@ -70,8 +76,10 @@ test/                             node --test, against the SDK's fake Gladys (in
   `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
   code (defaults, action, scene and widget handlers): change both sides
   together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
+- **User-facing text** exists in English, French, German and Spanish: action
+  messages, widget content, feature names, scene outputs, manifest texts, and
+  `docs/en.md`, `docs/fr.md`, `docs/de.md`, `docs/es.md`, kept in sync
+  (`test/i18n.test.js` checks the languages and the doc sections).
 - **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
   in English. Tests never touch the network.
 
@@ -197,6 +205,53 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
 - Les filtres de scène ne font qu'égalité et appartenance : un seuil reste le travail d'un capteur.
 - **Les clés de widgets, de déclencheurs et d'actions sont figées une fois publiées.**
 - `gladys_version` `>=5.1.0` dès qu'il y a widgets, déclencheurs ou actions de scène.
+
+## changedetection.io (propre à ce dépôt)
+
+- **API lue** : l'API REST `/api/v1` (en-tête `x-api-key`, clé dans Settings → API). Sans clé ou
+  mauvaise clé : **403** `"Invalid access - API key invalid."` (pas 401). `GET /api/v1/watch` donne
+  toutes les surveillances en une requête : `last_changed` (**0 tant qu'il n'y a qu'un instantané**),
+  `last_checked`, `last_error` (`false` ou le message), `viewed`, `title`, `page_title`, `url`,
+  `link`, `tags` (uuid). **`viewed` vaut `false` même sans changement** : « non vu » =
+  `last_changed > 0 && !viewed`. La liste ne dit pas si une surveillance est en pause.
+- **Prix et stock** : la 0.60.9 **n'expose pas** l'objet `restock` dans le détail
+  (`SYSTEM_MANAGED_NON_SPEC_FIELDS`). On les lit dans l'instantané du processeur `restock_diff`,
+  une ligne `In Stock: True - Price: 99.9` (`None` si non détecté), sans devise : d'où le réglage
+  « Devise des prix ». Le processeur se lit une fois par surveillance (`GET /api/v1/watch/<uuid>`,
+  champ `processor`), gardé dans `/data`.
+- **Extrait** : lignes du dernier instantané absentes du précédent (`/history`, puis
+  `/history/<horodatage>`), ou lignes retirées. L'endpoint `/difference/…` existe en 0.60.9 mais pas
+  forcément avant : écarté.
+- **Écritures** : `?recheck=1` / `?recheck_all=1` (vérifier maintenant) et
+  `PUT /api/v1/watch/<uuid> {"last_viewed": <s>}` (marquer comme vu, champ que l'interface pose à
+  l'ouverture de la différence ; `viewed` = `last_viewed >= dernier horodatage`).
+- **Fetch bloqué** : changedetection.io 0.60 refuse par défaut les pages en adresse privée
+  (« resolves to a private/reserved IP address »), il faut `ALLOW_IANA_RESTRICTED_ADDRESSES=true`
+  sur son conteneur (utile pour les tests ; l'utilisateur le voit comme une erreur de surveillance).
+- Événements : premier passage enregistré sans annonce ; état gardé dans
+  `/data/changedetection-state.json` (une surveillance supprimée est oubliée).
+
+## Vérifié sur un vrai changedetection.io
+
+Le 21/10/2026, image `ghcr.io/dgtlmoon/changedetection.io` 0.60.9 sur un réseau Docker privé, avec un
+serveur de pages de test (texte, boutique JSON-LD prix/stock, page en 500, page supprimée → 404).
+
+- **Image de l'intégration sans Gladys** (`--cap-drop ALL --security-opt no-new-privileges
+--read-only --memory 256m --pids-limit 256`, volume `/data`, réseau en pont) : reconnexion du SDK
+  en backoff, pas de plantage, aucun secret dans les logs, ~19 Mo au repos, arrêt propre sur SIGTERM
+  (code 0).
+- **Client réel, dans ce même conteneur** : liste, systeminfo, tags, processeur, historique ;
+  mauvaise clé (`auth`), pas de clé (`key_missing`), hôte inconnu et port fermé (`unreachable`),
+  autre service HTTP (`not_cd`).
+- **Intégration complète** (faux Gladys du SDK, noms en français) en deux processus qui partagent
+  `/data` : découverte (serveur + 4 surveillances, prix et stock sur la boutique), états, « Tester la
+  connexion » ; puis, après modification des pages, « Vérifier une page maintenant » (toutes) :
+  « Une page a changé » (extrait juste), « Un prix a baissé » (129.9 → 89.9), « De retour en stock »,
+  « Une surveillance échoue » (404), widget validé par `validateWidgetContent`, « Marquer comme vu »
+  reflété par changedetection.io.
+- Non vérifié : une vraie instance Gladys (rendu du widget et de la carte, éditeur de scènes), un
+  proxy inverse, les surveillances avec navigateur Playwright, une version de changedetection.io
+  autre que 0.60.9.
 
 ## Store
 

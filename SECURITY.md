@@ -30,6 +30,26 @@ Gladys before reporting a problem.
 
 In scope: the code of this repository and the Docker image it publishes.
 
+What the integration handles:
+
+- **Secrets**: the API key of changedetection.io is a `secret` field of the
+  Gladys configuration. The integration reads it from Gladys at startup, keeps
+  it in memory, sends it only to the changedetection.io typed in the
+  configuration (`x-api-key` header), and never writes it to `/data` nor to the
+  logs. Note that this key gives full access to the changedetection.io API;
+  the integration only uses it to read the watches, check them now and mark
+  them as viewed.
+- **Stored in `/data`**: `changedetection-state.json`, per watch uuid: the
+  last change and check times, whether it was in error, its processor, its last
+  price and stock, and the excerpt of its last change (text of the watched
+  page).
+- **Network**: requests go only to the changedetection.io address typed in the
+  configuration, in HTTP or HTTPS. HTTPS certificates are verified unless the
+  user ticks "Accept self-signed certificates"; the integration opens no port
+  and calls no cloud service.
+
 Out of scope: Gladys Assistant itself (see its
 [security policy](https://github.com/GladysAssistant/Gladys/security/policy)),
-and the third-party services and devices the integration talks to.
+changedetection.io itself (see its
+[repository](https://github.com/dgtlmoon/changedetection.io/security)), and the
+pages it watches.
