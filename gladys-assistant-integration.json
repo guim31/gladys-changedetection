@@ -8,8 +8,8 @@
     "de": "Erfahre in Gladys, wenn sich eine überwachte Webseite ändert: Preissenkung, wieder auf Lager, Neues.",
     "es": "Sepa en Gladys cuándo cambia una página web vigilada: bajada de precio, vuelta al stock, novedad."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/guim31/gladys-changedetection:1.0.0",
+  "version": "1.0.1",
+  "docker_image": "ghcr.io/guim31/gladys-changedetection:1.0.1",
   "gladys_version": ">=5.1.0",
   "cover_image": "https://raw.githubusercontent.com/guim31/gladys-changedetection/main/cover.png",
   "categories": ["services"],

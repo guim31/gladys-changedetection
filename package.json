@@ -1,6 +1,6 @@
 {
   "name": "gladys-changedetection",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Gladys Assistant integration for changedetection.io: watched web pages as devices, scene triggers on changes, price drops and restocks, a dashboard widget.",
   "type": "module",
